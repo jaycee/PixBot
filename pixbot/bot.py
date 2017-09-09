@@ -14,6 +14,10 @@ from telegram.ext import (
     Updater,
     )
 
+#TODO trim '@' off of user names in store
+#TODO better store management
+#TODO better debugging
+#TODO cleanup?
 
 KEY = os.environ.get('PIXBOT_TELEGRAM_KEY')
 USER_STORE = os.environ.get('PIXBOT_STORE', os.path.join(os.environ.get('PWD'), '.pixuserstore'))
