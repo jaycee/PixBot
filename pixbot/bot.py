@@ -1,11 +1,16 @@
-# TODO add webserver that has a get that takes secret key and then adds job to send
-
 import os
 import json
 import threading
+import random
 
+from bottle import (
+    request,
+    route,
+    run,
+    )
 from telegram.ext import (
     CommandHandler,
+    Job,
     Updater,
     )
 
@@ -14,9 +19,11 @@ KEY = os.environ.get('PIXBOT_TELEGRAM_KEY')
 USER_STORE = os.environ.get('PIXBOT_STORE', os.path.join(os.environ.get('PWD'), '.pixuserstore'))
 ADMIN_USER = os.environ.get('PIXBOT_ADMIN')
 DEBUG = True if os.environ.get('PIXBOT_DEBUG') == 'True' else False
+PICTURE_PATH = os.environ.get('PIXBOT_PICTURE_PATH', 'pictures')
 
 
 updater = Updater(token=KEY)
+job_queue = updater.job_queue
 
 
 def _shutdown():
@@ -52,6 +59,54 @@ def shutdown(bot, update):
         threading.Thread(target=_shutdown).start()
 
 
-updater.dispatcher.add_handler(CommandHandler('start', start))
-updater.dispatcher.add_handler(CommandHandler('shutdown', shutdown))
-updater.start_polling()
+def _send_pic(bot, job=None, chat_id=None):
+    if DEBUG:
+        print PICTURE_PATH
+    pic_list = os.listdir(PICTURE_PATH)
+    random.shuffle(pic_list)
+    pic = os.path.join(PICTURE_PATH, pic_list[0])
+    if DEBUG:
+        print pic
+    if chat_id is None:
+        if DEBUG:
+            print "Getting chat_id from job"
+        chat_id = job.context
+        if DEBUG:
+            print chat_id
+    bot.send_photo(chat_id=chat_id, photo=open(pic, 'rb'))
+
+
+def send_pic(bot, update):
+    chat_id = update.message.chat_id
+    if DEBUG:
+        print chat_id
+    _send_pic(bot, chat_id=chat_id)
+
+
+def start_updater():
+    updater.dispatcher.add_handler(CommandHandler('start', start))
+    updater.dispatcher.add_handler(CommandHandler('pic', send_pic))
+    updater.dispatcher.add_handler(CommandHandler('shutdown', shutdown))
+    updater.start_polling()
+
+
+@route('/sendpic', method='post')
+def send_pic_method():
+    store = json.load(file(USER_STORE))
+    username = request.forms.get('username')
+    if username is not None:
+        chat_id = store[username]
+        job_queue.put(Job(_send_pic, 0.0, context=chat_id, repeat=False))
+
+
+def _server():
+    run(host='0.0.0.0', port=5000)
+
+
+def server():
+    threading.Thread(target=_server).start()
+
+
+if __name__== "__main__":
+    server()
+    start_updater()
